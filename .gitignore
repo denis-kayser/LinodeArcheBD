@@ -1,20 +1,18 @@
 # Variables de entorno
 .env
-
-# Datos de PostgreSQL
-data/
-postgres_data/
-backups/
-dev_data/
-logs/
-
 .env.dev
-.DS_Store
+
+# Datos de PostgreSQL (los crea Docker automáticamente)
+postgres_data/
+
+# Backups (archivos pesados)
+backups/
 
 # Logs
+logs/
 *.log
 
-# Archivos temporales
+# Sistema
+.DS_Store
 *.tmp
 *.swp
-
