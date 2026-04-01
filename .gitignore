@@ -1,6 +1,5 @@
 # Variables de entorno
 .env
-.env.dev
 
 # Datos de PostgreSQL (los crea Docker automáticamente)
 postgres_data/
