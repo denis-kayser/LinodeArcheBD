@@ -1,0 +1,66 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_MAX_CONNECTIONS: 100
+      POSTGRES_WORK_MEM: 8MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      - postgres_backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  backup:
+    image: postgres:16-alpine
+    profiles: [with-backup]
+    container_name: postgres_backup
+    restart: unless-stopped
+    volumes:
+      - postgres_backups:/backups
+      - ./backup-scripts:/scripts:ro
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    entrypoint: >
+      sh -c "
+      apk add --no-cache dcron;
+      echo '0 2 * * * /scripts/backup.sh' > /etc/crontabs/root;
+      crond -f -l 2
+      "
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  postgres_backups:

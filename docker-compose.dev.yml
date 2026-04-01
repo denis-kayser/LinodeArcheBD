@@ -1,0 +1,86 @@
+# services:
+#   db:
+#     image: postgres:16-alpine
+#     container_name: postgres
+#     environment:
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: 123456
+#       POSTGRES_DB: test
+#     ports:
+#       - "0.0.0.0:5432:5432"
+#     volumes:
+#       - ./postgres_data:/var/lib/postgresql/data
+
+
+services:
+  postgres:                                          # nombre del servicio --> postgres
+    image: postgres:16-alpine                        # imagen de Postgres, versión 16 con Alpine Linux
+    container_name: ${CONTAINER_NAME:-postgres_dev}  #nombre del contenerdor
+    restart: unless-stopped                          # reiniciar a menos que se detenga manualmente
+    environment:                                     # variables de entorno para configurar Postgres
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secreet}
+      POSTGRES_DB: ${POSTGRES_DB:-arche}
+      # Configuración desde .env o defaults
+      POSTGRES_SHARED_BUFFERS: ${POSTGRES_SHARED_BUFFERS:-128MB}
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-50}
+      POSTGRES_WORK_MEM: ${POSTGRES_WORK_MEM:-4MB}
+    ports:
+      - "${HOST_PORT:-5433}:5432"                    # mapea puerto del host al contenedor, con valor por defecto
+    volumes:
+      # Usa volumen nombrado o directorio local según configuración
+      - ${POSTGRES_DATA_VOLUME:-./postgres_data}:/var/lib/postgresql/data   # datos persistentes
+      # Scripts de inicialización
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      # Backups
+      - ${POSTGRES_BACKUP_VOLUME:-./backups}:/backups
+    networks:
+      - ${NETWORK_NAME:-dev_network}                 # Conecta el contenedor a una red específica.
+    command: >                                       # Sobrescribe el comando por defecto del contenedor guarda LOG  y todas las consultas SQL           
+      postgres
+      -c log_statement=all                                     
+      -c log_min_duration_statement=200       
+    healthcheck:                                     # Verifica periódicamente que PostgreSQL esté funcionando correctamente osea que este vivo.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin}"]
+      interval: 5s                                   # Pregunta cada 5 segundos
+      timeout: 3s                                    # Si no responde en 3s, cuenta como fallo
+      retries: 3                                     # Si falla 3 veces seguidas → contenedor marcado como "unhealthy"
+
+  adminer:                                           # nombre del servicio --> adminer
+    image: adminer:5.4.2-standalone
+    container_name: adminer_dev                      #nombre del contenerdor 
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    networks:
+      - ${NETWORK_NAME:-dev_network}
+
+  seed-data:                                         # servicio temporal para cargar datos (se ejecuta manualmente)                           
+    image: postgres:16-alpine
+    profiles: [manual]
+    volumes:
+      - ./seed-data:/seed:ro
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-admin}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-secreet}
+      PGDATABASE: ${POSTGRES_DB:-archi}
+    command: >
+      sh -c "
+        until pg_isready -h postgres; do sleep 1; done;
+        for f in /seed/*.sql; do
+          echo 'Ejecutando $$f';
+          psql -f $$f;
+        done
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ${NETWORK_NAME:-dev_network}
+
+networks:
+  dev_network:
+    name: ${NETWORK_NAME:-dev_network}
+    driver: bridge

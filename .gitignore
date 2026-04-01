@@ -1,0 +1,20 @@
+# Variables de entorno
+.env
+
+# Datos de PostgreSQL
+data/
+postgres_data/
+backups/
+dev_data/
+logs/
+
+.env.dev
+.DS_Store
+
+# Logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.swp
+
